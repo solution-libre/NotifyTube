@@ -1,109 +1,152 @@
+import 'dart:async';
+import 'dart:convert' show json;
+
+import "package:http/http.dart" as http;
 import 'package:flutter/material.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
-void main() => runApp(new MyApp());
+GoogleSignIn _googleSignIn = new GoogleSignIn(
+  scopes: <String>[
+    'email',
+    'https://www.googleapis.com/auth/contacts.readonly',
+    'https://www.googleapis.com/auth/youtube',
+    'https://www.googleapis.com/auth/youtubepartner',
+  ],
+);
 
-class MyApp extends StatelessWidget {
-  // This widget is the root of your application.
+void main() {
+  runApp(
+    new MaterialApp(
+      title: 'NotifyTube',
+      home: new NotifyTube(),
+    ),
+  );
+}
+
+class NotifyTube extends StatefulWidget {
   @override
-  Widget build(BuildContext context) {
-    return new MaterialApp(
-      title: 'Flutter Demo',
-      theme: new ThemeData(
-        // This is the theme of your application.
-        //
-        // Try running your application with "flutter run". You'll see the
-        // application has a blue toolbar. Then, without quitting the app, try
-        // changing the primarySwatch below to Colors.green and then invoke
-        // "hot reload" (press "r" in the console where you ran "flutter run",
-        // or press Run > Flutter Hot Reload in IntelliJ). Notice that the
-        // counter didn't reset back to zero; the application is not restarted.
-        primarySwatch: Colors.blue,
-      ),
-      home: new MyHomePage(title: 'Flutter Demo Home Page'),
-    );
+  State createState() => new NotifyTubeState();
+}
+
+class NotifyTubeState extends State<NotifyTube> {
+  GoogleSignInAccount _currentUser;
+  String _subText;
+
+  @override
+  void initState() {
+    super.initState();
+    _googleSignIn.onCurrentUserChanged.listen((GoogleSignInAccount account) {
+      setState(() {
+        _currentUser = account;
+      });
+      if (_currentUser != null) {
+        _handleGetSubscriptions();
+      }
+    });
+    _googleSignIn.signInSilently();
   }
-}
 
-class MyHomePage extends StatefulWidget {
-  MyHomePage({Key key, this.title}) : super(key: key);
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
-
-  @override
-  _MyHomePageState createState() => new _MyHomePageState();
-}
-
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
-
-  void _incrementCounter() {
+  Future<Null> _handleGetSubscriptions() async {
     setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+      _subText = "Loading users subscriptions...";
+    });
+    final http.Response response = await http.get(
+      'https://www.googleapis.com/youtube/v3/subscriptions?part=snippet&mine=true',
+      headers: await _currentUser.authHeaders,
+    );
+    if (response.statusCode != 200) {
+      setState(() {
+        _subText = "Youtube API gave a ${response.statusCode} "
+            "response. Check logs for details.";
+      });
+      print('Youtube API ${response.statusCode} response: ${response.body}');
+      return;
+    }
+    final Map<String, dynamic> data = json.decode(response.body);
+    final String subscription = _pickFirstSubscription(data);
+    setState(() {
+      if (subscription != null) {
+        _subText = "I see you know $subscription!";
+      } else {
+        _subText = "No sub to display.";
+      }
     });
   }
 
+  String _pickFirstSubscription(Map<String, dynamic> data) {
+    final List<dynamic> subscriptions = data['items'];
+    final Map<String, dynamic> sub = subscriptions?.firstWhere(
+          (dynamic sub) => sub['snippet'] != null,
+      orElse: () => null,
+    );
+    if (sub != null) {
+      final String title = sub['snippet']['title'];
+      if (title != null) {
+        return title;
+      }
+    }
+    return null;
+  }
+
+  Future<Null> _handleSignIn() async {
+    try {
+      await _googleSignIn.signIn();
+    } catch (error) {
+      print(error);
+    }
+  }
+
+  Future<Null> _handleSignOut() async {
+    _googleSignIn.disconnect();
+  }
+
+  Widget _buildBody() {
+    if (_currentUser != null) {
+      return new Column(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: <Widget>[
+          new ListTile(
+            leading: new GoogleUserCircleAvatar(
+              identity: _currentUser,
+            ),
+            title: new Text(_currentUser.displayName),
+            subtitle: new Text(_currentUser.email),
+          ),
+          const Text("Signed in successfully."),
+          new Text(_subText),
+          new RaisedButton(
+            child: const Text('SIGN OUT'),
+            onPressed: _handleSignOut,
+          ),
+          new RaisedButton(
+            child: const Text('REFRESH'),
+            onPressed: _handleGetSubscriptions,
+          ),
+        ],
+      );
+    } else {
+      return new Column(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: <Widget>[
+          const Text("You are not currently signed in."),
+          new RaisedButton(
+            child: const Text('SIGN IN'),
+            onPressed: _handleSignIn,
+          ),
+        ],
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return new Scaffold(
-      appBar: new AppBar(
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: new Text(widget.title),
-      ),
-      body: new Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: new Column(
-          // Column is also layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Invoke "debug paint" (press "p" in the console where you ran
-          // "flutter run", or select "Toggle Debug Paint" from the Flutter tool
-          // window in IntelliJ) to see the wireframe for each widget.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            new Text(
-              'You have pushed the button this many times:',
-            ),
-            new Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.display1,
-            ),
-          ],
+        appBar: new AppBar(
+          title: const Text('NotifyTube'),
         ),
-      ),
-      floatingActionButton: new FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: new Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
-    );
+        body: new ConstrainedBox(
+          constraints: const BoxConstraints.expand(),
+          child: _buildBody(),
+        ));
   }
 }

@@ -1,4 +1,4 @@
-name: notify_tube
+name: NotifyTube
 description: To be notified. Always.
 
 dependencies:
@@ -8,6 +8,12 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^0.1.2
+  scoped_model: "^0.2.0"
+  async_loader: "^0.1.1"
+  font_awesome_flutter: 6.0.0
+  url_launcher: "^3.0.0"
+
+  google_sign_in: "^3.0.4"
 
 dev_dependencies:
   flutter_test:
