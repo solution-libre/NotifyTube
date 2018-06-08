@@ -31,27 +31,38 @@ class NotifyTube extends StatefulWidget {
 class NotifyTubeState extends State<NotifyTube> {
   GoogleSignInAccount _currentUser;
   String _subText;
+  List<Widget> subscriptionList;
+  void fetchData() {
+    subscriptionList.clear();
+    setState(() {
+      _handleGetSubscriptions();
+    });
+  }
 
   @override
   void initState() {
     super.initState();
+    subscriptionList = new List();
     _googleSignIn.onCurrentUserChanged.listen((GoogleSignInAccount account) {
       setState(() {
         _currentUser = account;
+        if (_currentUser != null) {
+          fetchData();
+        }
       });
-      if (_currentUser != null) {
-        _handleGetSubscriptions();
-      }
     });
     _googleSignIn.signInSilently();
   }
 
-  Future<Null> _handleGetSubscriptions() async {
+  Future<Null> _handleGetSubscriptions({String nextPageToken: ""}) async {
     setState(() {
       _subText = "Loading users subscriptions...";
     });
+    print("Before request npt: " + nextPageToken);
+    final String request = "https://www.googleapis.com/youtube/v3/subscriptions?part=snippet&mine=true&maxResults=20"+nextPageToken;
+    print("Request: "+request);
     final http.Response response = await http.get(
-      'https://www.googleapis.com/youtube/v3/subscriptions?part=snippet&mine=true',
+      request,
       headers: await _currentUser.authHeaders,
     );
     if (response.statusCode != 200) {
@@ -61,31 +72,58 @@ class NotifyTubeState extends State<NotifyTube> {
       });
       print('Youtube API ${response.statusCode} response: ${response.body}');
       return;
+    } else {
+      final Map<String, dynamic> data = json.decode(response.body);
+      setState(() {
+        getSubscriptions(data);
+      });
     }
-    final Map<String, dynamic> data = json.decode(response.body);
-    final String subscription = _pickFirstSubscription(data);
-    setState(() {
-      if (subscription != null) {
-        _subText = "I see you know $subscription!";
-      } else {
-        _subText = "No sub to display.";
-      }
-    });
   }
 
-  String _pickFirstSubscription(Map<String, dynamic> data) {
+  void getSubscriptions(Map<String, dynamic> data) {
+    List<Widget> resultList = new List();
     final List<dynamic> subscriptions = data['items'];
-    final Map<String, dynamic> sub = subscriptions?.firstWhere(
-          (dynamic sub) => sub['snippet'] != null,
-      orElse: () => null,
-    );
-    if (sub != null) {
-      final String title = sub['snippet']['title'];
-      if (title != null) {
-        return title;
+    final String nextPageToken = data['nextPageToken'];
+
+    for (var i = 0; i < subscriptions.length; i++) {
+      final Map<String, dynamic> sub = subscriptions[i];
+      if (sub != null) {
+        final String title = sub['snippet']['title'];
+        final String desc = sub['snippet']['description'];
+        buildListElement(title, desc, resultList);
       }
     }
-    return null;
+
+    if (nextPageToken != "" && nextPageToken != null) {
+      print("&nextPageToken="+nextPageToken);
+      _handleGetSubscriptions(nextPageToken: "&pageToken="+nextPageToken);
+    }
+    else {
+      setState(() {
+        _subText = "";
+      });
+    }
+    subscriptionList.addAll(resultList);
+    print("subscriptionList length: " + subscriptionList.length.toString());
+  }
+
+  void buildListElement(String title, String desc, List<Widget> resultList) {
+    if (title != null) {
+      resultList.add(new ListTile(
+        title: new Text(title,
+            style: new TextStyle(
+                fontWeight: FontWeight.w500, fontSize: 20.0)),
+        subtitle: new Text(
+            desc,
+            maxLines:1,
+        ),
+        leading: new Icon(
+          Icons.theaters,
+          color: Colors.blue[500],
+        ),
+      ),
+      );
+    }
   }
 
   Future<Null> _handleSignIn() async {
@@ -103,7 +141,6 @@ class NotifyTubeState extends State<NotifyTube> {
   Widget _buildBody() {
     if (_currentUser != null) {
       return new Column(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: <Widget>[
           new ListTile(
             leading: new GoogleUserCircleAvatar(
@@ -114,27 +151,25 @@ class NotifyTubeState extends State<NotifyTube> {
           ),
           const Text("Signed in successfully."),
           new Text(_subText),
+
+          new Expanded(
+            child: new ListView.builder(
+              itemBuilder: (BuildContext context, int index) => subscriptionList[index],
+              itemCount: subscriptionList.length,
+            ),
+          ),
           new RaisedButton(
             child: const Text('SIGN OUT'),
             onPressed: _handleSignOut,
           ),
           new RaisedButton(
             child: const Text('REFRESH'),
-            onPressed: _handleGetSubscriptions,
-          ),
-        ],
-      );
-    } else {
-      return new Column(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: <Widget>[
-          const Text("You are not currently signed in."),
-          new RaisedButton(
-            child: const Text('SIGN IN'),
-            onPressed: _handleSignIn,
-          ),
-        ],
-      );
+            onPressed: () {
+              fetchData();
+            },
+    ),
+    ],
+    );
     }
   }
 
@@ -150,3 +185,5 @@ class NotifyTubeState extends State<NotifyTube> {
         ));
   }
 }
+
+
