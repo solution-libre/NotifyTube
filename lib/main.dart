@@ -4,6 +4,18 @@ import 'dart:convert' show json;
 import "package:http/http.dart" as http;
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_local_notifications/initialization_settings.dart';
+import 'package:flutter_local_notifications/notification_details.dart';
+import 'package:flutter_local_notifications/platform_specifics/android/initialization_settings_android.dart';
+import 'package:flutter_local_notifications/platform_specifics/android/notification_details_android.dart';
+import 'package:flutter_local_notifications/platform_specifics/android/styles/big_text_style_information.dart';
+import 'package:flutter_local_notifications/platform_specifics/android/styles/default_style_information.dart';
+import 'package:flutter_local_notifications/platform_specifics/android/styles/inbox_style_information.dart';
+import 'package:flutter_local_notifications/platform_specifics/ios/initialization_settings_ios.dart';
+import 'package:flutter_local_notifications/platform_specifics/ios/notification_details_ios.dart';
+
+import 'package:NotifyTube/SecondScreen.dart';
 
 GoogleSignIn _googleSignIn = new GoogleSignIn(
   scopes: <String>[
@@ -29,10 +41,13 @@ class NotifyTube extends StatefulWidget {
 }
 
 class NotifyTubeState extends State<NotifyTube> {
+  // state changing elements
   GoogleSignInAccount _currentUser;
   String _subText;
   List<Widget> subscriptionList;
-  void fetchData() {
+  FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin;
+
+  void fetchYoutubeApiData() {
     subscriptionList.clear();
     setState(() {
       _handleGetSubscriptions();
@@ -42,23 +57,35 @@ class NotifyTubeState extends State<NotifyTube> {
   @override
   void initState() {
     super.initState();
+    initSubscriptions();
+    initGoogleSignIn();
+    initNotifications();
+  }
+
+  // --------------------------------- Init ------------------------------------
+
+  void initSubscriptions() {
     subscriptionList = new List();
+  }
+
+  void initGoogleSignIn() {
     _googleSignIn.onCurrentUserChanged.listen((GoogleSignInAccount account) {
       setState(() {
         _currentUser = account;
         if (_currentUser != null) {
-          fetchData();
+          fetchYoutubeApiData();
         }
       });
     });
     _googleSignIn.signInSilently();
   }
 
+  // -------------------------------- /Init ------------------------------------
+
   Future<Null> _handleGetSubscriptions({String nextPageToken: ""}) async {
     setState(() {
       _subText = "Loading users subscriptions...";
     });
-    print("Before request npt: " + nextPageToken);
     final String request =
         "https://www.googleapis.com/youtube/v3/subscriptions?part=snippet"
             "&mine=true"
@@ -159,16 +186,27 @@ class NotifyTubeState extends State<NotifyTube> {
               itemCount: subscriptionList.length,
             ),
           ),
-          new RaisedButton(
-            child: const Text('SIGN OUT'),
-            onPressed: _handleSignOut,
+          new Row(
+            children: <Widget>[
+              new RaisedButton(
+                child: const Text('SIGN OUT'),
+                onPressed: _handleSignOut,
+              ),
+              new RaisedButton(
+                child: const Text('REFRESH'),
+                onPressed: () {
+                  fetchYoutubeApiData();
+                },
+              ),
+              new RaisedButton(
+                child: const Text('NOTIF'),
+                onPressed: () {
+                  _showNotification();
+                },
+              ),
+            ],
           ),
-          new RaisedButton(
-            child: const Text('REFRESH'),
-            onPressed: () {
-              fetchData();
-            },
-          ),
+
         ],
       );
     }
@@ -191,9 +229,10 @@ class NotifyTubeState extends State<NotifyTube> {
                             style: new TextStyle(
                                 fontWeight: FontWeight.w500, fontSize: 20.0)),
                       ),
-                      new GoogleUserCircleAvatar(
-                        identity: _currentUser,
-                      ),
+                      // FixMe: too early, crashes no identity
+                      //new GoogleUserCircleAvatar(
+                      //  identity: _currentUser,
+                      //),
                     ],
                   ),
                   new Text('PeerTube',
@@ -212,4 +251,42 @@ class NotifyTubeState extends State<NotifyTube> {
               ],
             )));
   }
+
+  // --------------------------- Notifications ---------------------------------
+  void initNotifications() {
+    flutterLocalNotificationsPlugin = new FlutterLocalNotificationsPlugin();
+    InitializationSettingsAndroid initializationSettingsAndroid =
+    new InitializationSettingsAndroid("@mipmap/ic_launcher");
+    InitializationSettingsIOS initializationSettingsIOS =
+    new InitializationSettingsIOS();
+    InitializationSettings initializationSettings = new InitializationSettings(
+        initializationSettingsAndroid, initializationSettingsIOS);
+    flutterLocalNotificationsPlugin.initialize(initializationSettings,
+        selectNotification: onSelectNotification);
+  }
+
+  Future onSelectNotification(String payload) async {
+    if (payload != null) {
+      debugPrint('notification payload: ' + payload);
+    }
+
+    await Navigator.push(
+      context,
+      new MaterialPageRoute(builder: (context) => new SecondScreen(payload)),
+    );
+  }
+
+  Future _showNotification() async {
+    var androidPlatformChannelSpecifics = new NotificationDetailsAndroid(
+        'your channel id', 'your channel name', 'your channel description',
+        importance: Importance.Max, priority: Priority.High);
+    var iOSPlatformChannelSpecifics = new NotificationDetailsIOS();
+    var platformChannelSpecifics = new NotificationDetails(
+        androidPlatformChannelSpecifics, iOSPlatformChannelSpecifics);
+    await flutterLocalNotificationsPlugin.show(
+        0, 'Une jolie notif', 'On peut même cliquer dessus oO', platformChannelSpecifics,
+        payload: 'item x');
+  }
 }
+
+// --------------------------- /Notifications ----------------------------------
