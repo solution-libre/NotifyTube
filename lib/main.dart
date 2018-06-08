@@ -59,8 +59,13 @@ class NotifyTubeState extends State<NotifyTube> {
       _subText = "Loading users subscriptions...";
     });
     print("Before request npt: " + nextPageToken);
-    final String request = "https://www.googleapis.com/youtube/v3/subscriptions?part=snippet&mine=true&maxResults=20"+nextPageToken;
-    print("Request: "+request);
+    final String request =
+        "https://www.googleapis.com/youtube/v3/subscriptions?part=snippet"
+            "&mine=true"
+            "&fields=etag%2CeventId%2Citems%2Ckind%2CnextPageToken%2CpageInfo%2CprevPageToken%2CtokenPagination%2CvisitorId"
+            "&maxResults=50" +
+            nextPageToken;
+    print("Request: " + request);
     final http.Response response = await http.get(
       request,
       headers: await _currentUser.authHeaders,
@@ -95,10 +100,9 @@ class NotifyTubeState extends State<NotifyTube> {
     }
 
     if (nextPageToken != "" && nextPageToken != null) {
-      print("&nextPageToken="+nextPageToken);
-      _handleGetSubscriptions(nextPageToken: "&pageToken="+nextPageToken);
-    }
-    else {
+      print("&nextPageToken=" + nextPageToken);
+      _handleGetSubscriptions(nextPageToken: "&pageToken=" + nextPageToken);
+    } else {
       setState(() {
         _subText = "";
       });
@@ -109,19 +113,20 @@ class NotifyTubeState extends State<NotifyTube> {
 
   void buildListElement(String title, String desc, List<Widget> resultList) {
     if (title != null) {
-      resultList.add(new ListTile(
-        title: new Text(title,
-            style: new TextStyle(
-                fontWeight: FontWeight.w500, fontSize: 20.0)),
-        subtitle: new Text(
+      resultList.add(
+        new ListTile(
+          title: new Text(title,
+              style:
+                  new TextStyle(fontWeight: FontWeight.w500, fontSize: 20.0)),
+          subtitle: new Text(
             desc,
-            maxLines:1,
+            maxLines: 1,
+          ),
+          leading: new Icon(
+            Icons.theaters,
+            color: Colors.blue[500],
+          ),
         ),
-        leading: new Icon(
-          Icons.theaters,
-          color: Colors.blue[500],
-        ),
-      ),
       );
     }
   }
@@ -142,19 +147,13 @@ class NotifyTubeState extends State<NotifyTube> {
     if (_currentUser != null) {
       return new Column(
         children: <Widget>[
-          new ListTile(
-            leading: new GoogleUserCircleAvatar(
-              identity: _currentUser,
-            ),
-            title: new Text(_currentUser.displayName),
-            subtitle: new Text(_currentUser.email),
-          ),
-          const Text("Signed in successfully."),
+          //const Text("Signed in successfully."),
           new Text(_subText),
 
           new Expanded(
             child: new ListView.builder(
-              itemBuilder: (BuildContext context, int index) => subscriptionList[index],
+              itemBuilder: (BuildContext context, int index) =>
+                  subscriptionList[index],
               itemCount: subscriptionList.length,
             ),
           ),
@@ -167,23 +166,48 @@ class NotifyTubeState extends State<NotifyTube> {
             onPressed: () {
               fetchData();
             },
-    ),
-    ],
-    );
+          ),
+        ],
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return new Scaffold(
-        appBar: new AppBar(
-          title: const Text('NotifyTube'),
-        ),
-        body: new ConstrainedBox(
-          constraints: const BoxConstraints.expand(),
-          child: _buildBody(),
-        ));
+    return new DefaultTabController(
+        length: 2,
+        child: new Scaffold(
+            appBar: new AppBar(
+              title: new Text("NotifyTube"),
+              bottom: new TabBar(
+                tabs: [
+                  new Row(
+                    children: <Widget>[
+                      new Expanded(
+                        child: new Text('YouTube',
+                            textAlign: TextAlign.center,
+                            style: new TextStyle(
+                                fontWeight: FontWeight.w500, fontSize: 20.0)),
+                      ),
+                      new GoogleUserCircleAvatar(
+                        identity: _currentUser,
+                      ),
+                    ],
+                  ),
+                  new Text('PeerTube',
+                      style: new TextStyle(
+                          fontWeight: FontWeight.w500, fontSize: 20.0)),
+                ],
+              ),
+            ),
+            body: new TabBarView(
+              children: [
+                new ConstrainedBox(
+                  constraints: const BoxConstraints.expand(),
+                  child: _buildBody(),
+                ),
+                new Text('Work in progress'),
+              ],
+            )));
   }
 }
-
-
