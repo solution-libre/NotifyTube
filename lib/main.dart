@@ -95,7 +95,8 @@ class NotifyTubeState extends State<NotifyTube> {
       if (sub != null) {
         final String title = sub['snippet']['title'];
         final String desc = sub['snippet']['description'];
-        buildListElement(title, desc, resultList);
+        final Image pp = new Image.network(sub['snippet']['thumbnails']['default']['url']);
+        buildListElement(pp, title, desc, resultList);
       }
     }
 
@@ -111,7 +112,7 @@ class NotifyTubeState extends State<NotifyTube> {
     print("subscriptionList length: " + subscriptionList.length.toString());
   }
 
-  void buildListElement(String title, String desc, List<Widget> resultList) {
+  void buildListElement(Image pp, String title, String desc, List<Widget> resultList) {
     if (title != null) {
       resultList.add(
         new ListTile(
@@ -122,9 +123,10 @@ class NotifyTubeState extends State<NotifyTube> {
             desc,
             maxLines: 1,
           ),
-          leading: new Icon(
-            Icons.theaters,
-            color: Colors.blue[500],
+          leading: pp,
+          trailing: new Icon(
+            Icons.notifications,
+            color: Colors.grey[500],
           ),
         ),
       );
