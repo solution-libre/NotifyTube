@@ -62,16 +62,18 @@ class NotifyTubeState extends State<NotifyTube> {
   @override
   void initState() {
     super.initState();
-    initDatabase();
-    initGoogleSignIn();
-    initSubscriptions();
-    initNotifications();
+    initDatabase().then((plop) {
+      initGoogleSignIn();
+      initSubscriptions();
+      initNotifications();
+    });
   }
 
   // --------------------------------- Init ------------------------------------
 
   Future initDatabase() async {
     database = NotifyTubeDatabase.get();
+    await database.init();
   }
 
   void initGoogleSignIn() {
@@ -95,10 +97,7 @@ class NotifyTubeState extends State<NotifyTube> {
           await getSubscriptionsFromYt();
 
       //2. update our database to the subs
-      await database.updateSubscriptionsFromYt(subscriptionListFromAPI);
-
-
-      await initSubscriptions();
+      database.updateSubscriptionsFromYt(subscriptionListFromAPI).then((future) async => await initSubscriptions());
 
     } else {
       setState(() {

@@ -89,26 +89,31 @@ class NotifyTubeDatabase {
 
   /// Get a subscription by its id, if there is not entry for that ID, returns null.
   Future<SubscriptionDataBase> getSubscription(String localId) async {
-    var db = await _getDb();
-    var result = await db.rawQuery('SELECT * FROM $subscriptionTableName WHERE ${SubscriptionDataBase.db_local_id} = "$localId"');
+    var result;
+    await db.transaction((txn) async {
+      result = await txn.rawQuery('SELECT * FROM $subscriptionTableName WHERE ${SubscriptionDataBase.db_local_id} = "$localId"');
+    });
     if (result.length == 0) return null;
     return new SubscriptionDataBase.fromMap(result[0]);
   }
 
-  /// Get a subscription by its id, if there is not entry for that ID, returns null.
+  /// Get a subscription by its youtube id, if there is not entry for that ID, returns null.
   Future<SubscriptionDataBase> getSubscriptionFromYtId(String ytId) async {
-    var db = await _getDb();
-    var result = await db.rawQuery('SELECT * FROM $subscriptionTableName WHERE ${SubscriptionDataBase.db_youtube_id} = "$ytId"');
+    var result;
+    await db.transaction((txn) async {
+      result = await txn.rawQuery('SELECT * FROM $subscriptionTableName WHERE ${SubscriptionDataBase.db_youtube_id} = "$ytId"');
+    });
     if (result.length == 0) return null;
     return new SubscriptionDataBase.fromMap(result[0]);
   }
 
   /// Get all subscriptions with ids, will return a list with all the subscriptions found
   Future<List<SubscriptionDataBase>> getSubscriptions(List<String> ids) async {
-    var db = await _getDb();
-    // Building SELECT * FROM TABLE WHERE ID IN (id1, id2, ..., idn)
     var idsString = ids.map((it) => '"$it"').join(',');
-    var result = await db.rawQuery('SELECT * FROM $subscriptionTableName WHERE ${SubscriptionDataBase.db_local_id} IN ($idsString)');
+    var result;
+    await db.transaction((txn) async {
+      result = await txn.rawQuery('SELECT * FROM $subscriptionTableName WHERE ${SubscriptionDataBase.db_local_id} IN ($idsString)');
+    });
     List<SubscriptionDataBase> subscriptions = [];
     for (Map<String, dynamic> item in result) {
       subscriptions.add(new SubscriptionDataBase.fromMap(item));
@@ -117,9 +122,11 @@ class NotifyTubeDatabase {
   }
 
   Future<List<SubscriptionDataBase>> getAllSubscriptions() async {
-    var db = await _getDb();
-    var result = await db.rawQuery('SELECT * FROM $subscriptionTableName');
-    List<SubscriptionDataBase> subscriptions = [];
+    var result;
+    await db.transaction((txn) async {
+       result = await txn.rawQuery('SELECT * FROM $subscriptionTableName');
+    });
+    List<SubscriptionDataBase> subscriptions = new List();
     for (Map<String, dynamic> item in result) {
       subscriptions.add(new SubscriptionDataBase.fromMap(item));
     }
@@ -163,7 +170,11 @@ class NotifyTubeDatabase {
       }
     });
 
-    subscriptions.forEach((subscription) async => await updateSubscriptionFromYt(subscription));
+    Iterator subYtIterator = subscriptions.iterator;
+    while (subYtIterator.moveNext()) {
+      Subscription subYt = subYtIterator.current;
+      await updateSubscriptionFromYt(subYt);
+    }
   }
 
   /// Inserts the subs.
