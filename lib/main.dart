@@ -1,9 +1,17 @@
 import 'dart:async';
-import 'dart:convert' show json;
+import 'dart:io';
+import 'dart:isolate';
 
-import "package:http/http.dart" as http;
 import 'package:flutter/material.dart';
-import 'package:google_sign_in/google_sign_in.dart';
+
+import 'package:google_sign_in/google_sign_in.dart'
+    show GoogleSignIn, GoogleSignInAccount;
+
+import 'package:googleapis/youtube/v3.dart';
+import 'package:path/path.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:sqflite/sqflite.dart';
+
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_local_notifications/initialization_settings.dart';
 import 'package:flutter_local_notifications/notification_details.dart';
@@ -15,12 +23,15 @@ import 'package:flutter_local_notifications/platform_specifics/android/styles/in
 import 'package:flutter_local_notifications/platform_specifics/ios/initialization_settings_ios.dart';
 import 'package:flutter_local_notifications/platform_specifics/ios/notification_details_ios.dart';
 
+import 'package:android_alarm_manager/android_alarm_manager.dart';
+
+import 'package:NotifyTube/GoogleHttpClient.dart';
+import 'package:NotifyTube/NotifyTubeDatabase.dart';
 import 'package:NotifyTube/SecondScreen.dart';
 
 GoogleSignIn _googleSignIn = new GoogleSignIn(
   scopes: <String>[
     'email',
-    'https://www.googleapis.com/auth/contacts.readonly',
     'https://www.googleapis.com/auth/youtube',
     'https://www.googleapis.com/auth/youtubepartner',
   ],
@@ -43,118 +54,133 @@ class NotifyTube extends StatefulWidget {
 class NotifyTubeState extends State<NotifyTube> {
   // state changing elements
   GoogleSignInAccount _currentUser;
-  String _subText;
-  List<Widget> subscriptionList;
+  String _subText = "";
+  List<Widget> subscriptionWidgetList = new List();
   FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin;
-
-  void fetchYoutubeApiData() {
-    subscriptionList.clear();
-    setState(() {
-      _handleGetSubscriptions();
-    });
-  }
+  NotifyTubeDatabase database;
 
   @override
   void initState() {
     super.initState();
-    initSubscriptions();
+    initDatabase();
     initGoogleSignIn();
+    initSubscriptions();
     initNotifications();
   }
 
   // --------------------------------- Init ------------------------------------
 
-  void initSubscriptions() {
-    subscriptionList = new List();
+  Future initDatabase() async {
+    database = NotifyTubeDatabase.get();
   }
 
   void initGoogleSignIn() {
     _googleSignIn.onCurrentUserChanged.listen((GoogleSignInAccount account) {
       setState(() {
         _currentUser = account;
-        if (_currentUser != null) {
-          fetchYoutubeApiData();
-        }
       });
     });
-    _googleSignIn.signInSilently();
+    _googleSignIn.signIn();
+  }
+
+  Future fetchYoutubeApiData() async {
+    setState(() {
+      _subText = "Loading users subscriptions from Yt...";
+    });
+
+    if (_currentUser != null) {
+
+      //1. get subs
+      List<Subscription> subscriptionListFromAPI =
+          await getSubscriptionsFromYt();
+
+      //2. update our database to the subs
+      await database.updateSubscriptionsFromYt(subscriptionListFromAPI);
+
+
+      await initSubscriptions();
+
+    } else {
+      setState(() {
+        _subText = "No user connected...";
+      });
+    }
+  }
+
+  Future initSubscriptions() async {
+    setState(() {
+      _subText = "Loading users subscriptions from Database...";
+      subscriptionWidgetList.clear();
+    });
+
+    List<SubscriptionDataBase> allSubscriptionFromDatabase = await database.getAllSubscriptions();
+
+    print ("initSub.allSub.len: " + allSubscriptionFromDatabase.length.toString());
+
+    setState(() {
+      subscriptionWidgetList = prepareSubscriptionDisplay(allSubscriptionFromDatabase);
+      _subText = "";
+    });
   }
 
   // -------------------------------- /Init ------------------------------------
 
-  Future<Null> _handleGetSubscriptions({String nextPageToken: ""}) async {
-    setState(() {
-      _subText = "Loading users subscriptions...";
-    });
-    final String request =
-        "https://www.googleapis.com/youtube/v3/subscriptions?part=snippet"
-            "&mine=true"
-            "&fields=etag%2CeventId%2Citems%2Ckind%2CnextPageToken%2CpageInfo%2CprevPageToken%2CtokenPagination%2CvisitorId"
-            "&maxResults=50" +
-            nextPageToken;
-    print("Request: " + request);
-    final http.Response response = await http.get(
-      request,
-      headers: await _currentUser.authHeaders,
-    );
-    if (response.statusCode != 200) {
-      setState(() {
-        _subText = "Youtube API gave a ${response.statusCode} "
-            "response. Check logs for details.";
-      });
-      print('Youtube API ${response.statusCode} response: ${response.body}');
-      return;
-    } else {
-      final Map<String, dynamic> data = json.decode(response.body);
-      setState(() {
-        getSubscriptions(data);
-      });
-    }
-  }
-
-  void getSubscriptions(Map<String, dynamic> data) {
+  Future<List<Subscription>> getSubscriptionsFromYt() async {
+    List<Subscription> subscriptionListFromAPI = new List();
     List<Widget> resultList = new List();
-    final List<dynamic> subscriptions = data['items'];
-    final String nextPageToken = data['nextPageToken'];
 
-    for (var i = 0; i < subscriptions.length; i++) {
-      final Map<String, dynamic> sub = subscriptions[i];
-      if (sub != null) {
-        final String title = sub['snippet']['title'];
-        final String desc = sub['snippet']['description'];
-        final Image pp = new Image.network(sub['snippet']['thumbnails']['default']['url']);
-        buildListElement(pp, title, desc, resultList);
-      }
+    final authHeaders = _googleSignIn.currentUser.authHeaders;
+    final httpClient = new GoogleHttpClient(await authHeaders);
+
+    String nextPageToken = "";
+
+    SubscriptionListResponse subscriptions = new SubscriptionListResponse();
+
+    while (nextPageToken != null) {
+      subscriptions = await callApi(httpClient, nextPageToken);
+      nextPageToken = subscriptions.nextPageToken;
+      subscriptionListFromAPI.addAll(subscriptions.items);
     }
 
-    if (nextPageToken != "" && nextPageToken != null) {
-      print("&nextPageToken=" + nextPageToken);
-      _handleGetSubscriptions(nextPageToken: "&pageToken=" + nextPageToken);
-    } else {
-      setState(() {
-        _subText = "";
-      });
-    }
-    subscriptionList.addAll(resultList);
-    print("subscriptionList length: " + subscriptionList.length.toString());
+    return subscriptionListFromAPI;
   }
 
-  void buildListElement(Image pp, String title, String desc, List<Widget> resultList) {
-    if (title != null) {
-      resultList.add(
-        new ListTile(
-          title: new Text(title,
-              style:
-                  new TextStyle(fontWeight: FontWeight.w500, fontSize: 20.0)),
-          subtitle: new Text(
-            desc,
-            maxLines: 1,
-          ),
-          leading: pp,
-          trailing: new Icon(
-            Icons.notifications,
-            color: Colors.grey[500],
-          ),
+  Future<SubscriptionListResponse> callApi(
+      GoogleHttpClient httpClient, String nextPageToken) async {
+    SubscriptionListResponse subscriptions = await new YoutubeApi(httpClient)
+        .subscriptions
+        .list('snippet',
+            mine: true,
+            maxResults: 50,
+            pageToken: nextPageToken,
+            $fields:
+                "etag,eventId,items,kind,nextPageToken,pageInfo,prevPageToken,tokenPagination,visitorId");
+    return subscriptions;
+  }
+
+  List<Widget> prepareSubscriptionDisplay(List<Subscription> subscriptionListFromAPI) {
+    List<Widget> resultList = new List();
+    subscriptionListFromAPI.forEach((subscription) => resultList.add(buildListElement(subscription)));
+    return resultList;
+  }
+
+  Widget buildListElement(Subscription sub ) {
+    if (sub != null) {
+      final String title = sub.snippet.title;
+      final String desc = sub.snippet.description;
+      final Image pp = new Image.network(sub.snippet.thumbnails.default_.url);
+      return new ListTile(
+        title: new Text(title,
+            style:
+            new TextStyle(fontWeight: FontWeight.w500, fontSize: 20.0)),
+        subtitle: new Text(
+          desc,
+          maxLines: 1,
+        ),
+        leading: pp,
+        trailing: new Icon(
+          Icons.notifications,
+          color: Colors.grey[500],
         ),
       );
     }
@@ -182,8 +208,8 @@ class NotifyTubeState extends State<NotifyTube> {
           new Expanded(
             child: new ListView.builder(
               itemBuilder: (BuildContext context, int index) =>
-                  subscriptionList[index],
-              itemCount: subscriptionList.length,
+                  subscriptionWidgetList[index],
+              itemCount: subscriptionWidgetList.length,
             ),
           ),
           new Row(
@@ -193,7 +219,7 @@ class NotifyTubeState extends State<NotifyTube> {
                 onPressed: _handleSignOut,
               ),
               new RaisedButton(
-                child: const Text('REFRESH'),
+                child: const Text('SYNC'),
                 onPressed: () {
                   fetchYoutubeApiData();
                 },
@@ -204,11 +230,18 @@ class NotifyTubeState extends State<NotifyTube> {
                   _showNotification();
                 },
               ),
+              new RaisedButton(
+                child: const Text('DB_CONTENT'),
+                onPressed: () {
+                  printDbContent();
+                },
+              ),
             ],
           ),
-
         ],
       );
+    } else {
+      print("No user connected");
     }
   }
 
@@ -253,16 +286,20 @@ class NotifyTubeState extends State<NotifyTube> {
   }
 
   // --------------------------- Notifications ---------------------------------
-  void initNotifications() {
+  Future<Null> initNotifications() async {
     flutterLocalNotificationsPlugin = new FlutterLocalNotificationsPlugin();
     InitializationSettingsAndroid initializationSettingsAndroid =
-    new InitializationSettingsAndroid("@mipmap/ic_launcher");
+        new InitializationSettingsAndroid("@mipmap/ic_launcher");
     InitializationSettingsIOS initializationSettingsIOS =
-    new InitializationSettingsIOS();
+        new InitializationSettingsIOS();
     InitializationSettings initializationSettings = new InitializationSettings(
         initializationSettingsAndroid, initializationSettingsIOS);
     flutterLocalNotificationsPlugin.initialize(initializationSettings,
         selectNotification: onSelectNotification);
+
+    //final int helloAlarmID = 0;
+
+    //await AndroidAlarmManager.periodic(const Duration(minutes: 1), helloAlarmID, printHello);
   }
 
   Future onSelectNotification(String payload) async {
@@ -271,7 +308,7 @@ class NotifyTubeState extends State<NotifyTube> {
     }
 
     await Navigator.push(
-      context,
+      this.context,
       new MaterialPageRoute(builder: (context) => new SecondScreen(payload)),
     );
   }
@@ -283,10 +320,23 @@ class NotifyTubeState extends State<NotifyTube> {
     var iOSPlatformChannelSpecifics = new NotificationDetailsIOS();
     var platformChannelSpecifics = new NotificationDetails(
         androidPlatformChannelSpecifics, iOSPlatformChannelSpecifics);
-    await flutterLocalNotificationsPlugin.show(
-        0, 'Une jolie notif', 'On peut même cliquer dessus oO', platformChannelSpecifics,
+    await flutterLocalNotificationsPlugin.show(0, 'Une jolie notif',
+        'On peut même cliquer dessus oO', platformChannelSpecifics,
         payload: 'item x');
+  }
+
+  Future printDbContent() async {
+    database
+        .getAllSubscriptions()
+        .then((subs) => print("Number of subs: " + subs.length.toString()));
+    database.getAllSubscriptions().then((subs) => subs.forEach(
+        (sub) => print(sub.localId.toString() + " : " + sub.snippet.title)));
   }
 }
 
+void printHello() {
+  final DateTime now = new DateTime.now();
+  final int isolateId = Isolate.current.hashCode;
+  print("[$now] Hello, world! isolate=$isolateId function='$printHello'");
+}
 // --------------------------- /Notifications ----------------------------------
