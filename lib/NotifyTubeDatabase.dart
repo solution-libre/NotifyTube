@@ -3,46 +3,14 @@ import 'dart:io';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path_provider/path_provider.dart';
+
 import 'package:googleapis/youtube/v3.dart';
+import 'package:NotifyTube/model/SubscriptionDataBase.dart';
 
-class SubscriptionDataBase extends Subscription {
-  static final db_title = "title";
-  static final db_local_id = "local_id";
-  static final db_youtube_id = "youtube_id";
-  static final db_description = "description";
-  static final db_channel_id = "channel_id";
-  static final db_thumbnail_url = "thumbnail_url";
-  static final db_notify = "notify";
 
-  int localId;
-
-  SubscriptionDataBase(int localId, String youtubeId, String title, String channelId, String thumbnailUrl, String description) : super() {
-    id = youtubeId;
-    this.localId = localId;
-    snippet = new SubscriptionSnippet();
-    snippet.title = title;
-    snippet.channelId = channelId;
-    snippet.thumbnails = new ThumbnailDetails();
-    snippet.thumbnails.default_ = new Thumbnail();
-    snippet.thumbnails.default_.url = thumbnailUrl;
-    snippet.description = description;
-  }
-
-  SubscriptionDataBase.fromMap(Map<String, dynamic> map)
-      : this(
-          map[db_local_id],
-          map[db_youtube_id],
-          map[db_title],
-          map[db_channel_id],
-          map[db_thumbnail_url],
-          map[db_description],
-        );
-}
 
 class NotifyTubeDatabase {
   static final NotifyTubeDatabase _subscriptionDatabase = new NotifyTubeDatabase._internal();
-
-  final String subscriptionTableName = "Subscriptions";
 
   Database db;
 
@@ -66,15 +34,12 @@ class NotifyTubeDatabase {
 
   Future _init() async {
     // Get a location using path_provider
-
     Directory documentsDirectory = await getApplicationDocumentsDirectory();
     String path = join(documentsDirectory.path, "notifytube.db");
 
-    //await deleteDatabase(path);
-
     db = await openDatabase(path, version: 1, onCreate: (Database db, int version) async {
       // When creating the db, create the table
-      await db.execute("CREATE TABLE $subscriptionTableName ("
+      await db.execute("CREATE TABLE ${SubscriptionDataBase.subscriptionTableName} ("
           "${SubscriptionDataBase.db_local_id} INTEGER PRIMARY KEY, "
           "${SubscriptionDataBase.db_youtube_id} TEXT, "
           "${SubscriptionDataBase.db_channel_id} TEXT, "
@@ -84,74 +49,11 @@ class NotifyTubeDatabase {
           "${SubscriptionDataBase.db_notify} TEXT) ");
     });
     didInit = true;
-    print("DB INITED");
-  }
-
-  /// Get a subscription by its id, if there is not entry for that ID, returns null.
-  Future<SubscriptionDataBase> getSubscription(String localId) async {
-    var result;
-    await db.transaction((txn) async {
-      result = await txn.rawQuery('SELECT * FROM $subscriptionTableName WHERE ${SubscriptionDataBase.db_local_id} = "$localId"');
-    });
-    if (result.length == 0) return null;
-    return new SubscriptionDataBase.fromMap(result[0]);
-  }
-
-  /// Get a subscription by its youtube id, if there is not entry for that ID, returns null.
-  Future<SubscriptionDataBase> getSubscriptionFromYtId(String ytId) async {
-    var result;
-    await db.transaction((txn) async {
-      result = await txn.rawQuery('SELECT * FROM $subscriptionTableName WHERE ${SubscriptionDataBase.db_youtube_id} = "$ytId"');
-    });
-    if (result.length == 0) return null;
-    return new SubscriptionDataBase.fromMap(result[0]);
-  }
-
-  /// Get all subscriptions with ids, will return a list with all the subscriptions found
-  Future<List<SubscriptionDataBase>> getSubscriptions(List<String> ids) async {
-    var idsString = ids.map((it) => '"$it"').join(',');
-    var result;
-    await db.transaction((txn) async {
-      result = await txn.rawQuery('SELECT * FROM $subscriptionTableName WHERE ${SubscriptionDataBase.db_local_id} IN ($idsString)');
-    });
-    List<SubscriptionDataBase> subscriptions = [];
-    for (Map<String, dynamic> item in result) {
-      subscriptions.add(new SubscriptionDataBase.fromMap(item));
-    }
-    return subscriptions;
-  }
-
-  Future<List<SubscriptionDataBase>> getAllSubscriptions() async {
-    var result;
-    await db.transaction((txn) async {
-       result = await txn.rawQuery('SELECT * FROM $subscriptionTableName');
-    });
-    List<SubscriptionDataBase> subscriptions = new List();
-    for (Map<String, dynamic> item in result) {
-      subscriptions.add(new SubscriptionDataBase.fromMap(item));
-    }
-    return subscriptions;
-  }
-
-  //TODO escape not allowed characters eg. ' " '
-  /// Replaces the subs.
-  Future updateSubscription(SubscriptionDataBase subscription) async {
-    Map<String, dynamic> values = new Map();
-    values[SubscriptionDataBase.db_youtube_id] = subscription.id;
-    values[SubscriptionDataBase.db_channel_id] = subscription.snippet.channelId;
-    values[SubscriptionDataBase.db_title] = subscription.snippet.title;
-    values[SubscriptionDataBase.db_description] = subscription.snippet.description;
-    values[SubscriptionDataBase.db_thumbnail_url] = subscription.snippet.thumbnails.default_.url;
-
-    await db.transaction((txn) async {
-      await txn.update(subscriptionTableName, values, where: '${SubscriptionDataBase.db_local_id} = ?', whereArgs: [subscription.localId]);
-    });
-
   }
 
   Future updateSubscriptionsFromYt(List<Subscription> subscriptions) async {
     // get what we have in db
-    List<SubscriptionDataBase> subscriptionFromDatabase = await getAllSubscriptions();
+    List<SubscriptionDataBase> subscriptionFromDatabase = await SubscriptionDataBase.getAllSubscriptions(NotifyTubeDatabase.get());
 
     bool found;
     // For each element in db we look if it exists in the list from api
@@ -166,45 +68,38 @@ class NotifyTubeDatabase {
         }
       }
       if (!found) {
-        deleteSubscribe(subDb);
+        subDb.deleteSubscribe();
       }
     });
 
     Iterator subYtIterator = subscriptions.iterator;
     while (subYtIterator.moveNext()) {
       Subscription subYt = subYtIterator.current;
-      await updateSubscriptionFromYt(subYt);
+      await updateOrInsertSubscriptionFromYt(subYt);
     }
   }
 
-  /// Inserts the subs.
-  Future updateSubscriptionFromYt(Subscription subscription) async {
+  Future updateOrInsertSubscriptionFromYt(Subscription subscription) async {
 
-    SubscriptionDataBase previousEntry = await getSubscriptionFromYtId(subscription.id);
+    SubscriptionDataBase previousEntry = await SubscriptionDataBase.getSubscriptionByYtId(subscription.id,NotifyTubeDatabase.get());
 
     if (previousEntry != null) {
       previousEntry.snippet.title = subscription.snippet.title;
       previousEntry.snippet.description = subscription.snippet.description;
       previousEntry.snippet.channelId = subscription.snippet.channelId;
       previousEntry.snippet.thumbnails.default_.url = subscription.snippet.thumbnails.default_.url;
-      await updateSubscription(previousEntry);
+      await previousEntry.update();
     } else {
-      Map<String, dynamic> values = new Map();
-      values[SubscriptionDataBase.db_youtube_id] = subscription.id;
-      values[SubscriptionDataBase.db_channel_id] = subscription.snippet.channelId;
-      values[SubscriptionDataBase.db_title] = subscription.snippet.title;
-      values[SubscriptionDataBase.db_description] = subscription.snippet.description;
-      values[SubscriptionDataBase.db_thumbnail_url] = subscription.snippet.thumbnails.default_.url;
-      await db.transaction((txn) async {
-        await txn.insert(subscriptionTableName, values);
-      });
+      SubscriptionDataBase subToInsert = new SubscriptionDataBase(
+          null,
+          subscription.id,
+          subscription.snippet.title,
+          subscription.snippet.channelId,
+          subscription.snippet.thumbnails.default_.url,
+          subscription.snippet.description,
+          false);
+      await subToInsert.insert();
     }
-  }
-
-  Future deleteSubscribe(SubscriptionDataBase subToDelete) async {
-    await db.transaction((txn) async {
-      await txn.delete(subscriptionTableName, where: '${SubscriptionDataBase.db_local_id} = ?', whereArgs: [subToDelete.localId]);
-    });
   }
 
   Future close() async {

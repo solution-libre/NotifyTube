@@ -8,9 +8,6 @@ import 'package:google_sign_in/google_sign_in.dart'
     show GoogleSignIn, GoogleSignInAccount;
 
 import 'package:googleapis/youtube/v3.dart';
-import 'package:path/path.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:sqflite/sqflite.dart';
 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_local_notifications/initialization_settings.dart';
@@ -27,6 +24,7 @@ import 'package:android_alarm_manager/android_alarm_manager.dart';
 
 import 'package:NotifyTube/GoogleHttpClient.dart';
 import 'package:NotifyTube/NotifyTubeDatabase.dart';
+import 'package:NotifyTube/model/SubscriptionDataBase.dart';
 import 'package:NotifyTube/SecondScreen.dart';
 
 GoogleSignIn _googleSignIn = new GoogleSignIn(
@@ -112,7 +110,7 @@ class NotifyTubeState extends State<NotifyTube> {
       subscriptionWidgetList.clear();
     });
 
-    List<SubscriptionDataBase> allSubscriptionFromDatabase = await database.getAllSubscriptions();
+    List<SubscriptionDataBase> allSubscriptionFromDatabase = await SubscriptionDataBase.getAllSubscriptions(database);
 
     print ("initSub.allSub.len: " + allSubscriptionFromDatabase.length.toString());
 
@@ -126,7 +124,6 @@ class NotifyTubeState extends State<NotifyTube> {
 
   Future<List<Subscription>> getSubscriptionsFromYt() async {
     List<Subscription> subscriptionListFromAPI = new List();
-    List<Widget> resultList = new List();
 
     final authHeaders = _googleSignIn.currentUser.authHeaders;
     final httpClient = new GoogleHttpClient(await authHeaders);
@@ -164,11 +161,12 @@ class NotifyTubeState extends State<NotifyTube> {
   }
 
   Widget buildListElement(Subscription sub ) {
+    ListTile result = new ListTile();
     if (sub != null) {
       final String title = sub.snippet.title;
       final String desc = sub.snippet.description;
       final Image pp = new Image.network(sub.snippet.thumbnails.default_.url);
-      return new ListTile(
+      result = new ListTile(
         title: new Text(title,
             style:
             new TextStyle(fontWeight: FontWeight.w500, fontSize: 20.0)),
@@ -183,6 +181,7 @@ class NotifyTubeState extends State<NotifyTube> {
         ),
       );
     }
+    return result;
   }
 
   Future<Null> _handleSignIn() async {
@@ -198,8 +197,9 @@ class NotifyTubeState extends State<NotifyTube> {
   }
 
   Widget _buildBody() {
+    Column result = new Column();
     if (_currentUser != null) {
-      return new Column(
+      result = new Column(
         children: <Widget>[
           //const Text("Signed in successfully."),
           new Text(_subText),
@@ -240,8 +240,9 @@ class NotifyTubeState extends State<NotifyTube> {
         ],
       );
     } else {
-      print("No user connected");
+      print("_buildBody() : No user connected");
     }
+    return result;
   }
 
   @override
@@ -325,10 +326,10 @@ class NotifyTubeState extends State<NotifyTube> {
   }
 
   Future printDbContent() async {
-    database
-        .getAllSubscriptions()
+    SubscriptionDataBase
+        .getAllSubscriptions(database)
         .then((subs) => print("Number of subs: " + subs.length.toString()));
-    database.getAllSubscriptions().then((subs) => subs.forEach(
+    SubscriptionDataBase.getAllSubscriptions(database).then((subs) => subs.forEach(
         (sub) => print(sub.localId.toString() + " : " + sub.snippet.title)));
   }
 }
