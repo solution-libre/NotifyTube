@@ -68,7 +68,6 @@ class NotifyTubeState extends State<NotifyTube> {
   }
 
   // --------------------------------- Init ------------------------------------
-
   Future initDatabase() async {
     database = NotifyTubeDatabase.get();
     await database.init();
@@ -95,7 +94,7 @@ class NotifyTubeState extends State<NotifyTube> {
           await getSubscriptionsFromYt();
 
       //2. update our database to the subs
-      database.updateSubscriptionsFromYt(subscriptionListFromAPI).then((future) async => await initSubscriptions());
+      SubscriptionDataBase.updateSubscriptionsFromYt(subscriptionListFromAPI).then((future) async => await initSubscriptions());
 
     } else {
       setState(() {
@@ -119,9 +118,23 @@ class NotifyTubeState extends State<NotifyTube> {
       _subText = "";
     });
   }
-
   // -------------------------------- /Init ------------------------------------
 
+  // ------------------------------- gsignin -----------------------------------
+  Future<Null> _handleSignIn() async {
+    try {
+      await _googleSignIn.signIn();
+    } catch (error) {
+      print(error);
+    }
+  }
+
+  Future<Null> _handleSignOut() async {
+    _googleSignIn.disconnect();
+  }
+  // ------------------------------ /gsignin -----------------------------------
+
+  // ------------------------------ api calls ----------------------------------
   Future<List<Subscription>> getSubscriptionsFromYt() async {
     List<Subscription> subscriptionListFromAPI = new List();
 
@@ -153,14 +166,25 @@ class NotifyTubeState extends State<NotifyTube> {
                 "etag,eventId,items,kind,nextPageToken,pageInfo,prevPageToken,tokenPagination,visitorId");
     return subscriptions;
   }
+  // ----------------------------- /api calls ----------------------------------
+
+  // --------------------------------- UI --------------------------------------
+  @override
+  Widget build(BuildContext context) {
+    return new DefaultTabController(
+        length: 2,
+        child: new Scaffold(
+            appBar: buildScaffoldAppBar(),
+            body: buildScaffoldBody()));
+  }
 
   List<Widget> prepareSubscriptionDisplay(List<Subscription> subscriptionListFromAPI) {
     List<Widget> resultList = new List();
-    subscriptionListFromAPI.forEach((subscription) => resultList.add(buildListElement(subscription)));
+    subscriptionListFromAPI.forEach((subscription) => resultList.add(buildSubscriptionListTile(subscription)));
     return resultList;
   }
 
-  Widget buildListElement(Subscription sub ) {
+  Widget buildSubscriptionListTile(Subscription sub ) {
     ListTile result = new ListTile();
     if (sub != null) {
       final String title = sub.snippet.title;
@@ -184,26 +208,13 @@ class NotifyTubeState extends State<NotifyTube> {
     return result;
   }
 
-  Future<Null> _handleSignIn() async {
-    try {
-      await _googleSignIn.signIn();
-    } catch (error) {
-      print(error);
-    }
-  }
-
-  Future<Null> _handleSignOut() async {
-    _googleSignIn.disconnect();
-  }
-
-  Widget _buildBody() {
+  Widget buildSubscriptionList() {
     Column result = new Column();
     if (_currentUser != null) {
       result = new Column(
         children: <Widget>[
           //const Text("Signed in successfully."),
           new Text(_subText),
-
           new Expanded(
             child: new ListView.builder(
               itemBuilder: (BuildContext context, int index) =>
@@ -245,57 +256,61 @@ class NotifyTubeState extends State<NotifyTube> {
     return result;
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return new DefaultTabController(
-        length: 2,
-        child: new Scaffold(
-            appBar: new AppBar(
-              title: new Text("NotifyTube"),
-              bottom: new TabBar(
-                tabs: [
-                  new Row(
-                    children: <Widget>[
-                      new Expanded(
-                        child: new Text('YouTube',
-                            textAlign: TextAlign.center,
-                            style: new TextStyle(
-                                fontWeight: FontWeight.w500, fontSize: 20.0)),
-                      ),
-                      // FixMe: too early, crashes no identity
-                      //new GoogleUserCircleAvatar(
-                      //  identity: _currentUser,
-                      //),
-                    ],
-                  ),
-                  new Text('PeerTube',
-                      style: new TextStyle(
-                          fontWeight: FontWeight.w500, fontSize: 20.0)),
-                ],
+  Widget buildScaffoldBody() {
+    return new TabBarView(
+            children: [
+              new ConstrainedBox(
+                constraints: const BoxConstraints.expand(),
+                child: buildSubscriptionList(),
               ),
-            ),
-            body: new TabBarView(
-              children: [
-                new ConstrainedBox(
-                  constraints: const BoxConstraints.expand(),
-                  child: _buildBody(),
-                ),
-                new Text('Work in progress'),
-              ],
-            )));
+              new Text('Work in progress'),
+            ],
+          );
   }
+
+  Widget buildScaffoldAppBar() {
+    return new AppBar(
+            title: buildAppBarTitleWidget(),
+            bottom: buildAppBarBottomWidget(),
+          );
+  }
+
+  Widget buildAppBarTitleWidget() {
+    return new Text("NotifyTube");
+  }
+
+  Widget buildAppBarBottomWidget() {
+    return new TabBar(
+              tabs: [
+                new Row(
+                  children: <Widget>[
+                    new Expanded(
+                      child: new Text('YouTube',
+                          textAlign: TextAlign.center,
+                          style: new TextStyle(
+                              fontWeight: FontWeight.w500, fontSize: 20.0)),
+                    ),
+                    // FixMe: too early, crashes no identity
+                    //new GoogleUserCircleAvatar(
+                    //  identity: _currentUser,
+                    //),
+                  ],
+                ),
+                new Text('PeerTube',
+                    style: new TextStyle(
+                        fontWeight: FontWeight.w500, fontSize: 20.0)),
+              ],
+            );
+  }
+  // -------------------------------- /UI --------------------------------------
 
   // --------------------------- Notifications ---------------------------------
   Future<Null> initNotifications() async {
     flutterLocalNotificationsPlugin = new FlutterLocalNotificationsPlugin();
-    InitializationSettingsAndroid initializationSettingsAndroid =
-        new InitializationSettingsAndroid("@mipmap/ic_launcher");
-    InitializationSettingsIOS initializationSettingsIOS =
-        new InitializationSettingsIOS();
-    InitializationSettings initializationSettings = new InitializationSettings(
-        initializationSettingsAndroid, initializationSettingsIOS);
-    flutterLocalNotificationsPlugin.initialize(initializationSettings,
-        selectNotification: onSelectNotification);
+    InitializationSettingsAndroid initializationSettingsAndroid = new InitializationSettingsAndroid("@mipmap/ic_launcher");
+    InitializationSettingsIOS initializationSettingsIOS = new InitializationSettingsIOS();
+    InitializationSettings initializationSettings = new InitializationSettings(initializationSettingsAndroid, initializationSettingsIOS);
+    flutterLocalNotificationsPlugin.initialize(initializationSettings, selectNotification: onSelectNotification);
 
     //final int helloAlarmID = 0;
 
@@ -330,13 +345,15 @@ class NotifyTubeState extends State<NotifyTube> {
         .getAllSubscriptions(database)
         .then((subs) => print("Number of subs: " + subs.length.toString()));
     SubscriptionDataBase.getAllSubscriptions(database).then((subs) => subs.forEach(
-        (sub) => print(sub.localId.toString() + " : " + sub.snippet.title)));
+            (sub) => print(sub.localId.toString() + " : " + sub.snippet.title)));
+  }
+
+  void printHello() {
+    final DateTime now = new DateTime.now();
+    final int isolateId = Isolate.current.hashCode;
+    print("[$now] Hello, world! isolate=$isolateId function='$printHello'");
   }
 }
 
-void printHello() {
-  final DateTime now = new DateTime.now();
-  final int isolateId = Isolate.current.hashCode;
-  print("[$now] Hello, world! isolate=$isolateId function='$printHello'");
-}
+
 // --------------------------- /Notifications ----------------------------------

@@ -43,6 +43,17 @@ class SubscriptionDataBase extends Subscription {
     map[db_notify],
   );
 
+  static Future createTable(Database db) async {
+    await db.execute("CREATE TABLE ${SubscriptionDataBase.subscriptionTableName} ("
+        "${SubscriptionDataBase.db_local_id} INTEGER PRIMARY KEY, "
+        "${SubscriptionDataBase.db_youtube_id} TEXT, "
+        "${SubscriptionDataBase.db_channel_id} TEXT, "
+        "${SubscriptionDataBase.db_title} TEXT, "
+        "${SubscriptionDataBase.db_description} TEXT, "
+        "${SubscriptionDataBase.db_thumbnail_url} TEXT, "
+        "${SubscriptionDataBase.db_notify} TEXT) ");
+  }
+
   Future deleteSubscribe() async {
     await database.db.transaction((txn) async {
       await txn.delete(subscriptionTableName, where: '${SubscriptionDataBase.db_local_id} = ?', whereArgs: [this.localId]);
@@ -103,5 +114,56 @@ class SubscriptionDataBase extends Subscription {
     await database.db.transaction((txn) async {
       await txn.insert(subscriptionTableName, values);
     });
+  }
+
+  static Future updateSubscriptionsFromYt(List<Subscription> subscriptions) async {
+    // get what we have in db
+    List<SubscriptionDataBase> subscriptionFromDatabase = await SubscriptionDataBase.getAllSubscriptions(NotifyTubeDatabase.get());
+
+    bool found;
+    // For each element in db we look if it exists in the list from api
+    subscriptionFromDatabase.forEach((subDb) {
+      found = false;
+      Iterator subDbIterator = subscriptions.iterator;
+      while (subDbIterator.moveNext()) {
+        Subscription subYt = subDbIterator.current;
+        if (subDb.id == subYt.id) {
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        subDb.deleteSubscribe();
+      }
+    });
+
+    Iterator subYtIterator = subscriptions.iterator;
+    while (subYtIterator.moveNext()) {
+      Subscription subYt = subYtIterator.current;
+      await updateOrInsertSubscriptionFromYt(subYt);
+    }
+  }
+
+  static Future updateOrInsertSubscriptionFromYt(Subscription subscription) async {
+
+    SubscriptionDataBase previousEntry = await SubscriptionDataBase.getSubscriptionByYtId(subscription.id,NotifyTubeDatabase.get());
+
+    if (previousEntry != null) {
+      previousEntry.snippet.title = subscription.snippet.title;
+      previousEntry.snippet.description = subscription.snippet.description;
+      previousEntry.snippet.channelId = subscription.snippet.channelId;
+      previousEntry.snippet.thumbnails.default_.url = subscription.snippet.thumbnails.default_.url;
+      await previousEntry.update();
+    } else {
+      SubscriptionDataBase subToInsert = new SubscriptionDataBase(
+          null,
+          subscription.id,
+          subscription.snippet.title,
+          subscription.snippet.channelId,
+          subscription.snippet.thumbnails.default_.url,
+          subscription.snippet.description,
+          false);
+      await subToInsert.insert();
+    }
   }
 }
