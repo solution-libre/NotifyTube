@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:sqflite/sqflite.dart';
 import 'package:googleapis/youtube/v3.dart';
-import 'package:NotifyTube/NotifyTubeDatabase.dart';
+import 'package:NotifyTube/model/NotifyTubeDatabase.dart';
 
 class SubscriptionDataBase extends Subscription {
   static final String subscriptionTableName = "Subscriptions";
