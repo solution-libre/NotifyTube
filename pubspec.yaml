@@ -14,13 +14,15 @@ dependencies:
   url_launcher: "^3.0.0"
 
   google_sign_in: "^3.0.4"
+  http: "^0.11.3+16"
   googleapis: any
 
   flutter_local_notifications: "^0.2.9"
   flutter_cache_manager: "^0.1.1"
-  android_alarm_manager: "^0.1.1"
+  android_job_scheduler: "^0.0.7"
   path_provider: "^0.4.1"
   sqflite: any
+  xml: "^3.0.0"
 
 
 dev_dependencies:

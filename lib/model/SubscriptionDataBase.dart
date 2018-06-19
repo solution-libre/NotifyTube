@@ -10,25 +10,30 @@ class SubscriptionDataBase extends Subscription {
   static final db_local_id = "local_id";
   static final db_youtube_id = "youtube_id";
   static final db_description = "description";
-  static final db_channel_id = "channel_id";
+  static final db_resource_channel_id = "channel_id";
   static final db_thumbnail_url = "thumbnail_url";
   static final db_notify = "notify";
+  static final db_last_update = "last_update";
 
   int localId;
   bool notify;
+  String lastUpdate;
+
   NotifyTubeDatabase database;
 
-  SubscriptionDataBase(int localId, String youtubeId, String title, String channelId, String thumbnailUrl, String description, bool notify) : super() {
+  SubscriptionDataBase(int localId, String youtubeId, String title, String channelId, String thumbnailUrl, String description, bool notify, String lastUpdate) : super() {
     id = youtubeId;
     this.localId = localId;
     snippet = new SubscriptionSnippet();
     snippet.title = title;
-    snippet.channelId = channelId;
+    snippet.resourceId = new ResourceId();
+    snippet.resourceId.channelId = channelId;
     snippet.thumbnails = new ThumbnailDetails();
     snippet.thumbnails.default_ = new Thumbnail();
     snippet.thumbnails.default_.url = thumbnailUrl;
     snippet.description = description;
     this.notify = notify;
+    this.lastUpdate = lastUpdate;
     database = NotifyTubeDatabase.get();
   }
 
@@ -37,21 +42,24 @@ class SubscriptionDataBase extends Subscription {
     map[db_local_id],
     map[db_youtube_id],
     map[db_title],
-    map[db_channel_id],
+    map[db_resource_channel_id],
     map[db_thumbnail_url],
     map[db_description],
-    map[db_notify],
+    (map[db_notify]=="true"?true:false),
+    map[db_last_update],
   );
 
   static Future createTable(Database db) async {
+    //await db.execute("DROP TABLE ${SubscriptionDataBase.subscriptionTableName}");
     await db.execute("CREATE TABLE ${SubscriptionDataBase.subscriptionTableName} ("
         "${SubscriptionDataBase.db_local_id} INTEGER PRIMARY KEY, "
         "${SubscriptionDataBase.db_youtube_id} TEXT, "
-        "${SubscriptionDataBase.db_channel_id} TEXT, "
+        "${SubscriptionDataBase.db_resource_channel_id} TEXT, "
         "${SubscriptionDataBase.db_title} TEXT, "
         "${SubscriptionDataBase.db_description} TEXT, "
         "${SubscriptionDataBase.db_thumbnail_url} TEXT, "
-        "${SubscriptionDataBase.db_notify} TEXT) ");
+        "${SubscriptionDataBase.db_notify} TEXT, "
+        "${SubscriptionDataBase.db_last_update} TEXT) ");
   }
 
   Future deleteSubscribe() async {
@@ -90,14 +98,28 @@ class SubscriptionDataBase extends Subscription {
     return subscriptions;
   }
 
+  static Future<List<SubscriptionDataBase>> getAllSubscriptionsWithNotify(NotifyTubeDatabase database) async {
+    var result;
+    await database.db.transaction((txn) async {
+      result = await txn.rawQuery('SELECT * FROM ${SubscriptionDataBase.subscriptionTableName} WHERE ${SubscriptionDataBase.db_notify} = "true"');
+    });
+    List<SubscriptionDataBase> subscriptions = new List();
+    for (Map<String, dynamic> item in result) {
+      subscriptions.add(new SubscriptionDataBase.fromMap(item));
+    }
+    return subscriptions;
+  }
+
   /// Replaces the sub in DB.
   Future update() async {
     Map<String, dynamic> values = new Map();
     values[SubscriptionDataBase.db_youtube_id] = this.id;
-    values[SubscriptionDataBase.db_channel_id] = this.snippet.channelId;
+    values[SubscriptionDataBase.db_resource_channel_id] = this.snippet.resourceId.channelId;
     values[SubscriptionDataBase.db_title] = this.snippet.title;
     values[SubscriptionDataBase.db_description] = this.snippet.description;
     values[SubscriptionDataBase.db_thumbnail_url] = this.snippet.thumbnails.default_.url;
+    values[SubscriptionDataBase.db_notify] = this.notify.toString();
+    values[SubscriptionDataBase.db_last_update] = this.lastUpdate;
 
     await database.db.transaction((txn) async {
       await txn.update(SubscriptionDataBase.subscriptionTableName, values, where: '${SubscriptionDataBase.db_local_id} = ?', whereArgs: [this.localId]);
@@ -107,10 +129,12 @@ class SubscriptionDataBase extends Subscription {
   Future insert() async {
     Map<String, dynamic> values = new Map();
     values[SubscriptionDataBase.db_youtube_id] = this.id;
-    values[SubscriptionDataBase.db_channel_id] = this.snippet.channelId;
+    values[SubscriptionDataBase.db_resource_channel_id] = this.snippet.resourceId.channelId;
     values[SubscriptionDataBase.db_title] = this.snippet.title;
     values[SubscriptionDataBase.db_description] = this.snippet.description;
     values[SubscriptionDataBase.db_thumbnail_url] = this.snippet.thumbnails.default_.url;
+    values[SubscriptionDataBase.db_notify] = this.notify.toString();
+    values[SubscriptionDataBase.db_last_update] = this.lastUpdate;
     await database.db.transaction((txn) async {
       await txn.insert(subscriptionTableName, values);
     });
@@ -151,7 +175,7 @@ class SubscriptionDataBase extends Subscription {
     if (previousEntry != null) {
       previousEntry.snippet.title = subscription.snippet.title;
       previousEntry.snippet.description = subscription.snippet.description;
-      previousEntry.snippet.channelId = subscription.snippet.channelId;
+      previousEntry.snippet.resourceId.channelId = subscription.snippet.resourceId.channelId;
       previousEntry.snippet.thumbnails.default_.url = subscription.snippet.thumbnails.default_.url;
       await previousEntry.update();
     } else {
@@ -159,10 +183,11 @@ class SubscriptionDataBase extends Subscription {
           null,
           subscription.id,
           subscription.snippet.title,
-          subscription.snippet.channelId,
+          subscription.snippet.resourceId.channelId,
           subscription.snippet.thumbnails.default_.url,
           subscription.snippet.description,
-          false);
+          false,
+          DateTime.now().toUtc().toString());
       await subToInsert.insert();
     }
   }

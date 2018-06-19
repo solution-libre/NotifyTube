@@ -36,7 +36,6 @@ class NotifyTubeDatabase {
   Future _init() async {
     Directory documentsDirectory = await getApplicationDocumentsDirectory();
     String path = join(documentsDirectory.path, getDbFileName());
-
     db = await openDatabase(path, version: 1, onCreate: (Database db, int version) async {
       // ToDo: find a way to load the list of tables dynamically
       SubscriptionDataBase.createTable(db);
