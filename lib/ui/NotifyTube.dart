@@ -4,8 +4,7 @@ import 'dart:isolate';
 import 'package:flutter/material.dart';
 import 'package:xml/xml.dart' as xml;
 
-import 'package:google_sign_in/google_sign_in.dart'
-    show GoogleSignIn, GoogleSignInAccount;
+import 'package:google_sign_in/google_sign_in.dart' show GoogleSignIn, GoogleSignInAccount;
 
 import 'package:http/http.dart';
 
@@ -35,7 +34,6 @@ import 'package:flutter_local_notifications/platform_specifics/android/styles/in
 import 'package:flutter_local_notifications/platform_specifics/ios/initialization_settings_ios.dart';
 import 'package:flutter_local_notifications/platform_specifics/ios/notification_details_ios.dart';
 
-
 GoogleSignIn _googleSignIn = new GoogleSignIn(
   scopes: <String>[
     'email',
@@ -52,8 +50,8 @@ class NotifyTube extends StatefulWidget {
 class NotifyTubeState extends State<NotifyTube> {
   // state changing elements
   GoogleSignInAccount _currentUser;
-  Map<int,Widget> subscriptionWidgetMap = new Map<int,Widget>();
-  Map<int,Widget> notificationButtonMap = Map<int,Widget>();
+  Map<int, Widget> subscriptionWidgetMap = new Map<int, Widget>();
+  Map<int, Widget> notificationButtonMap = Map<int, Widget>();
   NotifyTubeDatabase database;
 
   List<int> _pendingJobs = new List<int>();
@@ -85,18 +83,14 @@ class NotifyTubeState extends State<NotifyTube> {
   }
 
   Future<Null> fetchYoutubeApiData() async {
-
     if (_currentUser != null) {
-
       //1. get subs
-      List<Subscription> subscriptionListFromAPI =
-      await getSubscriptionsFromYt();
+      List<Subscription> subscriptionListFromAPI = await getSubscriptionsFromYt();
 
       //2. update our database to the subs
       await SubscriptionDataBase.updateSubscriptionsFromYt(subscriptionListFromAPI).then((future) async => await initSubscriptionsWidgetMap());
-
     } else {
-        print("No user connected...");
+      print("No user connected...");
     }
   }
 
@@ -106,12 +100,12 @@ class NotifyTubeState extends State<NotifyTube> {
     });
 
     List<SubscriptionDataBase> allSubscriptionFromDatabase = await SubscriptionDataBase.getAllSubscriptions(database);
-    Map<int,Widget> widgetMap = await prepareSubscriptionDisplay(allSubscriptionFromDatabase);
+    Map<int, Widget> widgetMap = await prepareSubscriptionDisplay(allSubscriptionFromDatabase);
 
     setState(() {
-      debugPrint ("initSub.allSub.len: " + allSubscriptionFromDatabase.length.toString());
+      debugPrint("initSub.allSub.len: " + allSubscriptionFromDatabase.length.toString());
       subscriptionWidgetMap.addAll(widgetMap);
-      debugPrint ("initSub.subscriptionWidgetMap.len: " + subscriptionWidgetMap.length.toString());
+      debugPrint("initSub.subscriptionWidgetMap.len: " + subscriptionWidgetMap.length.toString());
     });
   }
   // -------------------------------- /Init ------------------------------------
@@ -150,16 +144,12 @@ class NotifyTubeState extends State<NotifyTube> {
     return subscriptionListFromAPI;
   }
 
-  Future<SubscriptionListResponse> callApi(
-      GoogleHttpClient httpClient, String nextPageToken) async {
-    SubscriptionListResponse subscriptions = await new YoutubeApi(httpClient)
-        .subscriptions
-        .list('snippet',
+  Future<SubscriptionListResponse> callApi(GoogleHttpClient httpClient, String nextPageToken) async {
+    SubscriptionListResponse subscriptions = await new YoutubeApi(httpClient).subscriptions.list('snippet',
         mine: true,
         maxResults: 50,
         pageToken: nextPageToken,
-        $fields:
-        "etag,eventId,items,kind,nextPageToken,pageInfo,prevPageToken,tokenPagination,visitorId");
+        $fields: "etag,eventId,items,kind,nextPageToken,pageInfo,prevPageToken,tokenPagination,visitorId");
     return subscriptions;
   }
   // ----------------------------- /api calls ----------------------------------
@@ -171,96 +161,88 @@ class NotifyTubeState extends State<NotifyTube> {
 
   @override
   Widget build(BuildContext context) {
-    return new DefaultTabController(
-        length: 2,
-        child: new Scaffold(
-            key: _scaffoldKey,
-            appBar: buildScaffoldAppBar(),
-            body: buildScaffoldBody()));
+    return new DefaultTabController(length: 2, child: new Scaffold(key: _scaffoldKey, appBar: buildScaffoldAppBar(), body: buildScaffoldBody()));
   }
 
-  Future<Map<int,Widget>> prepareSubscriptionDisplay(List<Subscription> subscriptionListFromAPI) async {
-    Map<int,Widget> resultList = new Map<int,Widget>();
+  Future<Map<int, Widget>> prepareSubscriptionDisplay(List<Subscription> subscriptionListFromAPI) async {
+    Map<int, Widget> resultList = new Map<int, Widget>();
     int index = 0;
 
     Iterator subListIterator = subscriptionListFromAPI.iterator;
     while (subListIterator.moveNext()) {
       Subscription subYt = subListIterator.current;
-      resultList[index] = await buildSubscriptionListTile(subYt,index++);
+      resultList[index] = await buildSubscriptionListTile(subYt, index++);
     }
 
     return resultList;
   }
 
-  Future<Widget> buildSubscriptionListTile(Subscription sub, int index ) async {
+  Future<Widget> buildSubscriptionListTile(Subscription sub, int index) async {
     ListTile result = new ListTile();
 
     if (sub != null) {
       SubscriptionDataBase subDb = await SubscriptionDataBase.getSubscriptionByYtId(sub.id, database);
-      IconButton trailingButton = createNotifyButton(subDb,index);
+      IconButton trailingButton = createNotifyButton(subDb, index);
 
       notificationButtonMap[index] = trailingButton;
       final String title = sub.snippet.title;
       final String desc = sub.snippet.description;
       final Image pp = new Image.network(sub.snippet.thumbnails.default_.url);
       result = new ListTile(
-          title: new Text(title,
-          style: new TextStyle(fontWeight: FontWeight.w500, fontSize: 20.0)),
-          subtitle: new Text( desc,
-          maxLines: 1,
-        ),
-        leading: pp,
-        trailing: trailingButton,
-        onTap:() {
-        setState(() {
-          _id = index; //if you want to assign the index somewhere to check
-        });
-        _scaffoldKey.currentState.showSnackBar(new SnackBar(content: new Text("You clicked item number $_id")));
-      }
-
-      );
+          title: new Text(title, style: new TextStyle(fontWeight: FontWeight.w500, fontSize: 20.0)),
+          subtitle: new Text(
+            desc,
+            maxLines: 1,
+          ),
+          leading: pp,
+          trailing: trailingButton,
+          onTap: () {
+            setState(() {
+              _id = index; //if you want to assign the index somewhere to check
+            });
+            _scaffoldKey.currentState.showSnackBar(new SnackBar(content: new Text("You clicked item number $_id")));
+          });
     }
     return result;
   }
 
-  Widget buildSubscriptionListTileFromUpdate(SubscriptionDataBase subDb, int index ) {
+  Widget buildSubscriptionListTileFromUpdate(SubscriptionDataBase subDb, int index) {
     ListTile result = new ListTile();
 
     if (subDb != null) {
-      IconButton trailingButton = createNotifyButton(subDb,index);
+      IconButton trailingButton = createNotifyButton(subDb, index);
 
       notificationButtonMap[index] = trailingButton;
       final String title = subDb.snippet.title;
       final String desc = subDb.snippet.description;
       final Image pp = new Image.network(subDb.snippet.thumbnails.default_.url);
       result = new ListTile(
-          title: new Text(title,
-              style: new TextStyle(fontWeight: FontWeight.w500, fontSize: 20.0)),
-          subtitle: new Text( desc,
+          title: new Text(title, style: new TextStyle(fontWeight: FontWeight.w500, fontSize: 20.0)),
+          subtitle: new Text(
+            desc,
             maxLines: 1,
           ),
           leading: pp,
           trailing: trailingButton,
-          onTap:() {
+          onTap: () {
             setState(() {
               _id = index; //if you want to assign the index somewhere to check
             });
             _scaffoldKey.currentState.showSnackBar(new SnackBar(content: new Text("You clicked item number $_id")));
-          }
-
-      );
+          });
     }
     return result;
   }
 
   IconButton createNotifyButton(SubscriptionDataBase subDb, int index) {
-
-    Color color = (subDb.notify?Colors.red:Colors.grey);
+    Color color = (subDb.notify ? Colors.red : Colors.grey);
 
     IconButton trailingButton = new IconButton(
       icon: new Icon(Icons.notifications),
       tooltip: 'Be notified !',
-      onPressed: () { changeSubscriptionNotifyStatusInDB(subDb, index); },
+      onPressed: () {
+        changeSubscriptionNotifyStatusInDB(subDb, index);
+      },
       color: color,
       disabledColor: Colors.grey,
       highlightColor: Colors.red,
@@ -269,28 +251,28 @@ class NotifyTubeState extends State<NotifyTube> {
   }
 
   void changeSubscriptionNotifyStatusInDB(SubscriptionDataBase subDb, int index) {
-    if(subDb.notify){
-      subDb.notify=false;
+    if (subDb.notify) {
+      subDb.notify = false;
       subDb.update();
     } else {
-      subDb.notify=true;
+      subDb.notify = true;
       subDb.update();
     }
-    Color color = (subDb.notify?Colors.red:Colors.grey);
+    Color color = (subDb.notify ? Colors.red : Colors.grey);
     setState(() {
       notificationButtonMap[index] = new IconButton(
         icon: new Icon(Icons.notifications),
         tooltip: 'Be notified !',
-        onPressed: () { changeSubscriptionNotifyStatusInDB(subDb, index); },
+        onPressed: () {
+          changeSubscriptionNotifyStatusInDB(subDb, index);
+        },
         color: color,
         disabledColor: Colors.grey,
         highlightColor: Colors.red,
       );
-      subscriptionWidgetMap[index] = buildSubscriptionListTileFromUpdate(subDb,index);
+      subscriptionWidgetMap[index] = buildSubscriptionListTileFromUpdate(subDb, index);
     });
   }
-
-
 
   Widget buildYoutubeTab() {
     Column result = new Column();
@@ -298,11 +280,12 @@ class NotifyTubeState extends State<NotifyTube> {
       result = new Column(
         children: <Widget>[
           new Expanded(
-            child: new RefreshIndicator(child: new ListView.builder(
-              itemBuilder: (BuildContext context, int index) =>
-              subscriptionWidgetMap[index],
-              itemCount: subscriptionWidgetMap.length,
-            ), onRefresh: () => fetchYoutubeApiData()),
+            child: new RefreshIndicator(
+                child: new ListView.builder(
+                  itemBuilder: (BuildContext context, int index) => subscriptionWidgetMap[index],
+                  itemCount: subscriptionWidgetMap.length,
+                ),
+                onRefresh: () => fetchYoutubeApiData()),
           ),
           new Row(
             children: <Widget>[
@@ -310,26 +293,23 @@ class NotifyTubeState extends State<NotifyTube> {
                 child: const Text('SIGN OUT'),
                 onPressed: _handleSignOut,
               ),
-              new RaisedButton(
-                child: const Text('DB_CONTENT'),
-                onPressed: () {
-                  printDbContent();
-                },
-              ),
               new RaisedButton.icon(
                   onPressed: () async {
                     try {
-                      await AndroidJobScheduler.scheduleEvery(
-                        const Duration(seconds: 10),
-                        42,
-                        jobSchedulerCallback,
-                        persistentAcrossReboots: true);
+                      await AndroidJobScheduler.scheduleEvery(const Duration(seconds: 10), 42, jobSchedulerCallback, persistentAcrossReboots: true);
                     } finally {
                       updatePendingJobs();
                     }
                   },
                   icon: const Icon(Icons.check_box),
-                  label: Text('Install Job')),
+                  label: Text('Notifs OK')),
+              new RaisedButton.icon(
+                  onPressed: () {
+                    AndroidJobScheduler.cancelJob(42);
+                    updatePendingJobs();
+                  },
+                  icon: const Icon(Icons.delete),
+                  label: Text('Notifs KO')),
             ],
           ),
         ],
@@ -369,10 +349,7 @@ class NotifyTubeState extends State<NotifyTube> {
         new Row(
           children: <Widget>[
             new Expanded(
-              child: new Text('YouTube',
-                  textAlign: TextAlign.center,
-                  style: new TextStyle(
-                      fontWeight: FontWeight.w500, fontSize: 20.0)),
+              child: new Text('YouTube', textAlign: TextAlign.center, style: new TextStyle(fontWeight: FontWeight.w500, fontSize: 20.0)),
             ),
             // FixMe: too early, crashes no identity
             //new GoogleUserCircleAvatar(
@@ -380,9 +357,7 @@ class NotifyTubeState extends State<NotifyTube> {
             //),
           ],
         ),
-        new Text('PeerTube',
-            style: new TextStyle(
-                fontWeight: FontWeight.w500, fontSize: 20.0)),
+        new Text('PeerTube', style: new TextStyle(fontWeight: FontWeight.w500, fontSize: 20.0)),
       ],
     );
   }
@@ -390,14 +365,11 @@ class NotifyTubeState extends State<NotifyTube> {
 
   // ------------------------------- Debug -------------------------------------
   Future printDbContent() async {
-    SubscriptionDataBase
-        .getAllSubscriptions(database)
-        .then((subs) => print("Number of subs: " + subs.length.toString()));
-    SubscriptionDataBase.getAllSubscriptions(database).then((subs) => subs.forEach(
-            (sub) => print(sub.localId.toString() + " : " + sub.snippet.title + " / " + sub.notify.toString() + " / " + sub.lastUpdate)));
+    SubscriptionDataBase.getAllSubscriptions(database).then((subs) => print("Number of subs: " + subs.length.toString()));
+    SubscriptionDataBase.getAllSubscriptions(database).then((subs) =>
+        subs.forEach((sub) => print(sub.localId.toString() + " : " + sub.snippet.title + " / " + sub.notify.toString() + " / " + sub.lastUpdate)));
   }
   // ------------------------------ /Debug -------------------------------------
-
 
   Future<Null> initNotifications() async {
     //initFileWatcher();
@@ -429,11 +401,9 @@ class NotifyTubeState extends State<NotifyTube> {
   }
 
   updatePendingJobs() async {
-    final jobs =
-    await AndroidJobScheduler.getAllPendingJobs();
+    final jobs = await AndroidJobScheduler.getAllPendingJobs();
     setState(() {
-      _pendingJobs =
-          jobs.map((AndroidJobInfo i) => i.id).toList();
+      _pendingJobs = jobs.map((AndroidJobInfo i) => i.id).toList();
     });
   }
 }
@@ -444,22 +414,18 @@ InitializationSettingsAndroid initializationSettingsAndroid = new Initialization
 InitializationSettingsIOS initializationSettingsIOS = new InitializationSettingsIOS();
 InitializationSettings initializationSettings = new InitializationSettings(initializationSettingsAndroid, initializationSettingsIOS);
 
-
 Future<File> getCommonStateFile() async {
   final targetDir = await getApplicationDocumentsDirectory();
   return new File("${targetDir.path}/times_called.txt");
 }
 
-Future _showNotification(Map<String,Map<int,String>> updates) async {
+Future _showNotification(Map<String, Map<int, String>> updates) async {
   flutterLocalNotificationsPlugin.initialize(initializationSettings, selectNotification: onSelectNotification);
-  var androidPlatformChannelSpecifics = new NotificationDetailsAndroid(
-      '42', 'NotifyTube', 'Be notified from your subscriptions',
-      importance: Importance.Max, priority: Priority.High);
+  var androidPlatformChannelSpecifics =
+      new NotificationDetailsAndroid('42', 'NotifyTube', 'Be notified from your subscriptions', importance: Importance.Max, priority: Priority.High);
   var iOSPlatformChannelSpecifics = new NotificationDetailsIOS();
-  var platformChannelSpecifics = new NotificationDetails(
-      androidPlatformChannelSpecifics, iOSPlatformChannelSpecifics);
-  await flutterLocalNotificationsPlugin.show(0, 'Nouvelles Vidéos !',
-      updates.toString(), platformChannelSpecifics);
+  var platformChannelSpecifics = new NotificationDetails(androidPlatformChannelSpecifics, iOSPlatformChannelSpecifics);
+  await flutterLocalNotificationsPlugin.show(0, 'Nouvelles Vidéos !', updates.toString(), platformChannelSpecifics);
 }
 
 Future onSelectNotification(String payload) async {
@@ -471,43 +437,46 @@ void jobSchedulerCallback() async {
   await database.init();
 
   Client httpClient = new Client();
+  Map<String, Map<int, String>> channelUpdatesMap = new Map<String, Map<int, String>>();
 
-  SubscriptionDataBase.getAllSubscriptionsWithNotify(database).then((subs) => print("Number of subs: " + subs.length.toString()));
-  Map<String,Map<int,String>> channelUpdatesMap = new Map<String,Map<int,String>>();
-  SubscriptionDataBase.getAllSubscriptionsWithNotify(database).then((subs) => subs.forEach(
-          (sub) {
-            print("NotifyTube : " + sub.localId.toString() + " : " + sub.snippet.title + " / " + sub.notify.toString());
-            httpClient.read("https://www.youtube.com/feeds/videos.xml?channel_id=" + sub.snippet.resourceId.channelId).then(
-              (res) {
-                 xml.XmlDocument channelXML = xml.parse(res);
-                 var videoMap = channelXML.findAllElements("entry");
-                 List<xml.XmlElement> videoList = videoMap.toList();
-                 Map<int,String> newVideoMap = new Map<int,String>();
-                 int videoIndex=0;
-                 videoList.forEach((video) {
-                   DateTime published = DateTime.parse(video.findElements("published").first.text);
-                   DateTime lastUpdate = DateTime.parse(sub.lastUpdate);
-                   print("Video plus récente ? " + (lastUpdate.isBefore(published).toString()));
-                   if (lastUpdate.isBefore(published)){
-                     newVideoMap[videoIndex++]=video.findElements("title").first.text;
-                   }
+  List<SubscriptionDataBase> subs = await SubscriptionDataBase.getAllSubscriptionsWithNotify(database);
+  print("Number of subs: " + subs.length.toString());
 
-                 });
-                 if (newVideoMap.length > 0){
-                   channelUpdatesMap[sub.snippet.title] = newVideoMap;
-                 }
-              }
-            );
-            sub.lastUpdate = DateTime.now().toUtc().toString();
-            sub.update();
-          })
-  );
-  if (channelUpdatesMap.length > 0){
-    await _showNotification(channelUpdatesMap);
+  Iterator subsIterator = subs.iterator;
+
+  String httpGetResult;
+  while (subsIterator.moveNext()) {
+    SubscriptionDataBase sub = subsIterator.current;
+    print("NotifyTube : " + sub.localId.toString() + " : " + sub.snippet.title + " / " + sub.notify.toString()+ " / " + sub.lastUpdate);
+
+    httpGetResult = await httpClient.read("https://www.youtube.com/feeds/videos.xml?channel_id=" + sub.snippet.resourceId.channelId);
+
+    //httpClient.close();
+    xml.XmlDocument channelXML = xml.parse(httpGetResult);
+    var videoMap = channelXML.findAllElements("entry");
+    List<xml.XmlElement> videoList = videoMap.toList();
+    Map<int, String> newVideoMap = new Map<int, String>();
+    int videoIndex = 0;
+    videoList.forEach((video) {
+      DateTime published = DateTime.parse(video.findElements("published").first.text);
+      print("Published : " + published.toString());
+      DateTime lastUpdate = DateTime.parse(sub.lastUpdate);
+
+      if (lastUpdate.isBefore(published)) {
+        print("Video plus récente !");
+        newVideoMap[videoIndex++] = video.findElements("title").first.text;
+      }
+    });
+    if (newVideoMap.length > 0) {
+      channelUpdatesMap[sub.snippet.title] = newVideoMap;
+      sub.lastUpdate = DateTime.now().toUtc().toString();
+      sub.update();
+    }
   }
 
-
-
+  if (channelUpdatesMap.length > 0) {
+    await _showNotification(channelUpdatesMap);
+  }
 
   //await _showNotification();
   //print('Yolo executing');
