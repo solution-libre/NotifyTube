@@ -33,6 +33,7 @@ import 'package:flutter_local_notifications/platform_specifics/android/styles/de
 import 'package:flutter_local_notifications/platform_specifics/android/styles/inbox_style_information.dart';
 import 'package:flutter_local_notifications/platform_specifics/ios/initialization_settings_ios.dart';
 import 'package:flutter_local_notifications/platform_specifics/ios/notification_details_ios.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 GoogleSignIn _googleSignIn = new GoogleSignIn(
   scopes: <String>[
@@ -187,7 +188,8 @@ class NotifyTubeState extends State<NotifyTube> {
       notificationButtonMap[index] = trailingButton;
       final String title = sub.snippet.title;
       final String desc = sub.snippet.description;
-      final Image pp = new Image.network(sub.snippet.thumbnails.default_.url);
+      final Image pp = new Image(image: new CachedNetworkImageProvider(sub.snippet.thumbnails.default_.url));
+
       result = new ListTile(
           title: new Text(title, style: new TextStyle(fontWeight: FontWeight.w500, fontSize: 20.0)),
           subtitle: new Text(
@@ -413,6 +415,7 @@ FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = new FlutterLoc
 InitializationSettingsAndroid initializationSettingsAndroid = new InitializationSettingsAndroid("@mipmap/ic_launcher");
 InitializationSettingsIOS initializationSettingsIOS = new InitializationSettingsIOS();
 InitializationSettings initializationSettings = new InitializationSettings(initializationSettingsAndroid, initializationSettingsIOS);
+Client httpClient = new Client();
 
 Future<File> getCommonStateFile() async {
   final targetDir = await getApplicationDocumentsDirectory();
@@ -436,7 +439,7 @@ void jobSchedulerCallback() async {
   NotifyTubeDatabase database = NotifyTubeDatabase.get();
   await database.init();
 
-  Client httpClient = new Client();
+
   Map<String, Map<int, String>> channelUpdatesMap = new Map<String, Map<int, String>>();
 
   List<SubscriptionDataBase> subs = await SubscriptionDataBase.getAllSubscriptionsWithNotify(database);
@@ -451,7 +454,7 @@ void jobSchedulerCallback() async {
 
     httpGetResult = await httpClient.read("https://www.youtube.com/feeds/videos.xml?channel_id=" + sub.snippet.resourceId.channelId);
 
-    //httpClient.close();
+
     xml.XmlDocument channelXML = xml.parse(httpGetResult);
     var videoMap = channelXML.findAllElements("entry");
     List<xml.XmlElement> videoList = videoMap.toList();

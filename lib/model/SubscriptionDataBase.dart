@@ -19,6 +19,7 @@ class SubscriptionDataBase extends Subscription {
   bool notify;
   String lastUpdate;
 
+
   NotifyTubeDatabase database;
 
   SubscriptionDataBase(int localId, String youtubeId, String title, String channelId, String thumbnailUrl, String description, bool notify, String lastUpdate) : super() {
