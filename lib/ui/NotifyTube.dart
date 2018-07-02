@@ -13,13 +13,10 @@ import 'package:googleapis/youtube/v3.dart';
 import 'package:NotifyTube/GoogleHttpClient.dart';
 import 'package:NotifyTube/model/NotifyTubeDatabase.dart';
 import 'package:NotifyTube/model/SubscriptionDataBase.dart';
-import 'package:NotifyTube/SecondScreen.dart';
-import 'package:NotifyTube/ui/YoutubeTileList.dart';
 
 import 'package:android_job_scheduler/android_job_scheduler.dart';
 
 import 'dart:io';
-import 'dart:async';
 
 import 'package:path_provider/path_provider.dart';
 
@@ -28,9 +25,6 @@ import 'package:flutter_local_notifications/initialization_settings.dart';
 import 'package:flutter_local_notifications/notification_details.dart';
 import 'package:flutter_local_notifications/platform_specifics/android/initialization_settings_android.dart';
 import 'package:flutter_local_notifications/platform_specifics/android/notification_details_android.dart';
-import 'package:flutter_local_notifications/platform_specifics/android/styles/big_text_style_information.dart';
-import 'package:flutter_local_notifications/platform_specifics/android/styles/default_style_information.dart';
-import 'package:flutter_local_notifications/platform_specifics/android/styles/inbox_style_information.dart';
 import 'package:flutter_local_notifications/platform_specifics/ios/initialization_settings_ios.dart';
 import 'package:flutter_local_notifications/platform_specifics/ios/notification_details_ios.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -169,10 +163,19 @@ class NotifyTubeState extends State<NotifyTube> {
     Map<int, Widget> resultList = new Map<int, Widget>();
     int index = 0;
 
-    Iterator subListIterator = subscriptionListFromAPI.iterator;
-    while (subListIterator.moveNext()) {
-      Subscription subYt = subListIterator.current;
-      resultList[index] = await buildSubscriptionListTile(subYt, index++);
+    if (subscriptionListFromAPI.isNotEmpty)
+    {
+      Iterator subListIterator = subscriptionListFromAPI.iterator;
+      while (subListIterator.moveNext())
+      {
+        Subscription subYt = subListIterator.current;
+        resultList[index] = await buildSubscriptionListTile(subYt, index++);
+      }
+    }
+    else
+    {
+      resultList[index] = new Text("",textAlign: TextAlign.center);
+      resultList[++index] = new Text("Tirez vers le bas pour actualiser vos abonnements !",textAlign: TextAlign.center, textScaleFactor: 1.6);
     }
 
     return resultList;
@@ -202,7 +205,7 @@ class NotifyTubeState extends State<NotifyTube> {
             setState(() {
               _id = index; //if you want to assign the index somewhere to check
             });
-            _scaffoldKey.currentState.showSnackBar(new SnackBar(content: new Text("You clicked item number $_id")));
+            //_scaffoldKey.currentState.showSnackBar(new SnackBar(content: new Text("You clicked item number $_id")));
           });
     }
     return result;
@@ -276,6 +279,18 @@ class NotifyTubeState extends State<NotifyTube> {
     });
   }
 
+  Widget buildPeertubeTab() {
+    Column result = new Column();
+    result = new Column(
+      children: <Widget>[
+        new Text("",textAlign: TextAlign.center),
+        new Text("Travail en cours, prochaine version !",textAlign: TextAlign.center, textScaleFactor: 1.6),
+      ],
+    );
+
+    return result;
+  }
+
   Widget buildYoutubeTab() {
     Column result = new Column();
     if (_currentUser != null) {
@@ -288,31 +303,6 @@ class NotifyTubeState extends State<NotifyTube> {
                   itemCount: subscriptionWidgetMap.length,
                 ),
                 onRefresh: () => fetchYoutubeApiData()),
-          ),
-          new Row(
-            children: <Widget>[
-              new RaisedButton(
-                child: const Text('SIGN OUT'),
-                onPressed: _handleSignOut,
-              ),
-              new RaisedButton.icon(
-                  onPressed: () async {
-                    try {
-                      await AndroidJobScheduler.scheduleEvery(const Duration(seconds: 10), 42, jobSchedulerCallback, persistentAcrossReboots: true);
-                    } finally {
-                      updatePendingJobs();
-                    }
-                  },
-                  icon: const Icon(Icons.check_box),
-                  label: Text('Notifs OK')),
-              new RaisedButton.icon(
-                  onPressed: () {
-                    AndroidJobScheduler.cancelJob(42);
-                    updatePendingJobs();
-                  },
-                  icon: const Icon(Icons.delete),
-                  label: Text('Notifs KO')),
-            ],
           ),
         ],
       );
@@ -329,7 +319,10 @@ class NotifyTubeState extends State<NotifyTube> {
           constraints: const BoxConstraints.expand(),
           child: buildYoutubeTab(),
         ),
-        new Text('Work in progress'),
+        new ConstrainedBox(
+          constraints: const BoxConstraints.expand(),
+          child: buildPeertubeTab(),
+        ),
       ],
     );
   }
@@ -374,15 +367,43 @@ class NotifyTubeState extends State<NotifyTube> {
   // ------------------------------ /Debug -------------------------------------
 
   Future<Null> initNotifications() async {
-    //initFileWatcher();
-    //updateCallBackTimesCalled();
-    //updatePendingJobs();
+    List<AndroidJobInfo> pendingJobs = await AndroidJobScheduler.getAllPendingJobs();
+    Iterator pendingJobsIterator = pendingJobs.iterator;
+    bool found = false;
+    while (pendingJobsIterator.moveNext()) {
+      AndroidJobInfo jobInfo = pendingJobsIterator.current;
+      if (jobInfo.id == 42)
+      {
+        found = true;
+        break;
+      }
+    }
+    if (!found)
+    {
+      await AndroidJobScheduler.scheduleEvery(const Duration(hours: 1), 42, jobSchedulerCallback, persistentAcrossReboots: true);
+    }
   }
 
-  void printHello() {
-    final DateTime now = new DateTime.now();
-    final int isolateId = Isolate.current.hashCode;
-    print("[$now] Hello, world! isolate=$isolateId function='$printHello'");
+  Future<Null> isJobPresent() async {
+    List<AndroidJobInfo> pendingJobs = await AndroidJobScheduler.getAllPendingJobs();
+    Iterator pendingJobsIterator = pendingJobs.iterator;
+    bool found = false;
+    while (pendingJobsIterator.moveNext()) {
+      AndroidJobInfo jobInfo = pendingJobsIterator.current;
+      if (jobInfo.id == 42)
+      {
+        found = true;
+        break;
+      }
+    }
+    if (!found)
+    {
+      print("NOT FOUND");
+    }
+    else
+    {
+      print("FOUND");
+    }
   }
 
   initFileWatcher() async {
