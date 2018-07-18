@@ -142,6 +142,7 @@ class SubscriptionDataBase extends Subscription {
   }
 
   static Future updateSubscriptionsFromYt(List<Subscription> subscriptions) async {
+    Iterator subYtIterator;
     // get what we have in db
     List<SubscriptionDataBase> subscriptionFromDatabase = await SubscriptionDataBase.getAllSubscriptions(NotifyTubeDatabase.get());
 
@@ -149,9 +150,9 @@ class SubscriptionDataBase extends Subscription {
     // For each element in db we look if it exists in the list from api
     subscriptionFromDatabase.forEach((subDb) {
       found = false;
-      Iterator subDbIterator = subscriptions.iterator;
-      while (subDbIterator.moveNext()) {
-        Subscription subYt = subDbIterator.current;
+      subYtIterator = subscriptions.iterator;
+      while (subYtIterator.moveNext()) {
+        Subscription subYt = subYtIterator.current;
         if (subDb.id == subYt.id) {
           found = true;
           break;
@@ -162,7 +163,7 @@ class SubscriptionDataBase extends Subscription {
       }
     });
 
-    Iterator subYtIterator = subscriptions.iterator;
+    subYtIterator = subscriptions.iterator;
     while (subYtIterator.moveNext()) {
       Subscription subYt = subYtIterator.current;
       await updateOrInsertSubscriptionFromYt(subYt);
